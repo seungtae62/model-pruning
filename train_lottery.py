@@ -137,14 +137,14 @@ def main():
     with open(os.path.join(save_dir, 'args.json'), 'w') as f:
         json.dump(vars(args), f, indent=2)
 
-    logging.info(f"\nExperiment: {args.experiment_name}")
+    logging.info(f"Experiment: {args.experiment_name}")
     logging.info(f"Save directory: {save_dir}")
-    logging.info(f"\nHyperparameters:")
+    logging.info(f"Hyperparameters:")
     for key, value in vars(args).items():
-        logging.info(f"  {key}: {value}")
+        logging.debug(f"{key}: {value}")
 
     # Data loaders
-    logging.info("\nLoading CIFAR-10...")
+    logging.info("Loading CIFAR-10...")
     train_loader, val_loader, test_loader = get_cifar10_loaders(
         batch_size=args.batch_size,
         num_workers=4
@@ -154,7 +154,7 @@ def main():
     logging.info(f"Test samples: {len(test_loader.dataset)}")
 
     # Model
-    logging.info(f"\nCreating {args.arch}...")
+    logging.info(f"Creating {args.arch}...")
     if args.arch == 'resnet18':
         model = ResNet18()
     else:
@@ -171,13 +171,13 @@ def main():
         global_pruning=args.global_pruning
     )
 
-    logging.info(f"\nPruning configuration:")
-    logging.info(f"  Strategy: {'Global' if args.global_pruning else 'Layer-wise'}")
-    logging.info(f"  Pruning rate: {args.pruning_rate * 100:.1f}%")
+    logging.info(f"Pruning configuration:")
+    logging.info(f"Strategy: {'Global' if args.global_pruning else 'Layer-wise'}")
+    logging.info(f"Pruning rate: {args.pruning_rate * 100:.1f}%")
     if args.pruning_rate_conv:
-        logging.info(f"  Conv rate: {args.pruning_rate_conv * 100:.1f}%")
+        logging.info(f"Conv rate: {args.pruning_rate_conv * 100:.1f}%")
     if args.pruning_rate_fc:
-        logging.info(f"  FC rate: {args.pruning_rate_fc * 100:.1f}%")
+        logging.info(f"FC rate: {args.pruning_rate_fc * 100:.1f}%")
 
     # Lottery Ticket Trainer
     trainer = LotteryTicketTrainer(model, pruner, device)
@@ -186,11 +186,9 @@ def main():
     criterion = nn.CrossEntropyLoss()
 
     # Run iterative pruning
-    logging.info(f"\n{'='*60}")
     logging.info(f"Starting Lottery Ticket Experiment")
     logging.info(f"Pruning rounds: {args.num_rounds}")
     logging.info(f"Epochs per round: {args.epochs}")
-    logging.info(f"{'='*60}\n")
 
     results = trainer.run_iterative_pruning(
         train_loader=train_loader,
@@ -205,19 +203,17 @@ def main():
     )
 
     # Print summary
-    logging.info(f"\n{'='*60}")
     logging.info("LOTTERY TICKET EXPERIMENT COMPLETE")
-    logging.info(f"{'='*60}")
-    logging.info(f"\nResults Summary:")
+    logging.info(f"Results Summary:")
     logging.info(f"{'Round':<8} {'Sparsity':<12} {'Val Acc':<12} {'Test Acc':<12}")
-    logging.info("-" * 48)
+
     for r in results:
         sparsity_str = f"{r['sparsity']:.2f}%"
         val_acc_str = f"{r['best_val_acc']:.2f}%"
         test_acc_str = f"{r['test_acc']:.2f}%" if r['test_acc'] else "N/A"
         logging.info(f"{r['round']:<8} {sparsity_str:<12} {val_acc_str:<12} {test_acc_str:<12}")
 
-    logging.info(f"\nResults saved to: {save_dir}")
+    logging.info(f"Results saved to: {save_dir}")
 
 
 if __name__ == '__main__':
