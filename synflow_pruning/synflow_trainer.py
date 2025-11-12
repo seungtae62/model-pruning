@@ -232,8 +232,7 @@ class SynFlowTrainer:
         results = {
             'target_sparsity': target_sparsity,
             'actual_sparsity': 100.0 - stats['overall'],
-            'remaining_weights_pct': stats['overall'],
-            'total_params': stats['total_params'],
+            'remaining_weights_pct': stats['overall'], 'total_params': stats['total_params'],
             'remaining_params': stats['remaining_params'],
             'train_history': history,
             'best_val_acc': max(history['val_acc']),
@@ -241,7 +240,6 @@ class SynFlowTrainer:
             'test_acc': test_acc
         }
 
-        # Save results
         if save_dir:
             os.makedirs(save_dir, exist_ok=True)
 
@@ -260,3 +258,127 @@ class SynFlowTrainer:
             logging.info(f"Results saved to: {save_dir}")
 
         return results
+
+    def run_iterative_synflow_experiment(self,
+                                          train_loader,
+                                          val_loader,
+                                          test_loader,
+                                          optimizer_fn,
+                                          scheduler_fn,
+                                          criterion,
+                                          input_shape: tuple = (64, 3, 32, 32),
+                                          sparsity_levels: List[float] = None,
+                                          num_epochs: int = 200,
+                                          save_dir: Optional[str] = None) -> List[Dict]:
+        """
+        Run iterative SynFlow experiment with multiple sparsity levels.
+
+        Similar to Lottery Ticket: for each sparsity level, prune at init then train.
+
+        Args:
+            optimizer_fn: Function that creates optimizer given model
+            scheduler_fn: Function that creates scheduler given optimizer
+            sparsity_levels: List of target sparsities to try (e.g., [0.0, 0.5, 0.8, 0.9, 0.95])
+        """
+        if sparsity_levels is None:
+            sparsity_levels = [0.0, 0.5, 0.8, 0.9, 0.95]
+
+        logging.info(f"\n{'='*80}")
+        logging.info(f"ITERATIVE SYNFLOW EXPERIMENT")
+        logging.info(f"Sparsity levels: {sparsity_levels}")
+        logging.info(f"Epochs per level: {num_epochs}")
+        logging.info(f"{'='*80}\n")
+
+        # Store initial weights
+        initial_state = {name: param.data.clone()
+                        for name, param in self.model.named_parameters()}
+
+        all_results = []
+
+        for round_idx, target_sparsity in enumerate(sparsity_levels):
+            logging.info(f"\n{'='*80}")
+            logging.info(f"ROUND {round_idx}: Target Sparsity = {target_sparsity*100:.1f}%")
+            logging.info(f"{'='*80}\n")
+
+            # Reset model to initial weights
+            with torch.no_grad():
+                for name, param in self.model.named_parameters():
+                    if name in initial_state:
+                        param.data.copy_(initial_state[name])
+
+            # Prune at initialization
+            if target_sparsity > 0.0:
+                self.prune_at_init(input_shape, target_sparsity)
+            else:
+                # Dense model - create all-ones masks
+                self.masks = {
+                    name: torch.ones_like(param, dtype=torch.float32)
+                    for name, param in self.model.named_parameters()
+                    if param.requires_grad and len(param.shape) > 1
+                }
+
+            # Create fresh optimizer and scheduler
+            optimizer = optimizer_fn(self.model)
+            scheduler = scheduler_fn(optimizer) if scheduler_fn else None
+
+            # Train the pruned network
+            history = self.train_full(
+                train_loader, val_loader, optimizer, criterion,
+                scheduler, num_epochs, save_dir=None  # Don't save best model yet
+            )
+
+            # Test
+            test_metrics = self.validate(test_loader, criterion)
+            test_acc = test_metrics['accuracy']
+            logging.info(f"Round {round_idx} Test Accuracy: {test_acc:.2f}%")
+
+            # Prepare results
+            stats = get_sparsity_stats(self.masks)
+            round_results = {
+                'round': round_idx,
+                'target_sparsity': target_sparsity,
+                'sparsity': stats['overall'],  # Actual remaining %
+                'best_val_acc': max(history['val_acc']),
+                'final_val_acc': history['val_acc'][-1],
+                'test_acc': test_acc,
+                'total_params': stats['total_params'],
+                'remaining_params': stats['remaining_params']
+            }
+
+            all_results.append(round_results)
+
+            # Save round results
+            if save_dir:
+                os.makedirs(save_dir, exist_ok=True)
+
+                # Save this round's results
+                round_file = os.path.join(save_dir, f'round_{round_idx}_results.json')
+                with open(round_file, 'w') as f:
+                    json.dump(round_results, f, indent=2)
+
+                # Save masks
+                mask_file = os.path.join(save_dir, f'masks_round_{round_idx}.pth')
+                torch.save(self.masks, mask_file)
+
+                # Save model checkpoint
+                checkpoint_file = os.path.join(save_dir, f'model_round_{round_idx}.pth')
+                torch.save({
+                    'round': round_idx,
+                    'model_state_dict': self.model.state_dict(),
+                    'masks': self.masks,
+                    'test_acc': test_acc,
+                    'sparsity': stats['overall']
+                }, checkpoint_file)
+
+        # Save summary of all rounds
+        if save_dir:
+            summary_file = os.path.join(save_dir, 'all_rounds_summary.json')
+            with open(summary_file, 'w') as f:
+                json.dump(all_results, f, indent=2)
+            logging.info(f"\nAll results saved to: {save_dir}")
+
+        logging.info(f"\n{'='*80}")
+        logging.info(f"ITERATIVE SYNFLOW EXPERIMENT COMPLETE")
+        logging.info(f"{'='*80}\n")
+
+        return all_results
