@@ -46,8 +46,8 @@ def parse_args():
     # SynFlow Pruning
     parser.add_argument('--pruning_rate_per_iteration', type=float, default=0.2,
                        help='Fraction to prune each SynFlow iteration')
-    parser.add_argument('--num_iterations', type=int, default=100,
-                       help='Number of SynFlow pruning iterations')
+    parser.add_argument('--num_iterations', type=int, default=20,
+                       help='Number of SynFlow pruning iterations (FIXED: 20 works, 100 over-prunes!)')
 
     # Iterative rounds
     parser.add_argument('--num_rounds', type=int, default=5,
@@ -131,7 +131,7 @@ def main():
     logging.info(f"Test samples: {len(test_loader.dataset)}")
 
     # Model (at random initialization)
-    logging.info(f"\nCreating {args.arch} at random initialization...")
+    logging.info(f"Creating {args.arch} at random initialization...")
     if args.arch == 'resnet18':
         model = ResNet18()
     else:

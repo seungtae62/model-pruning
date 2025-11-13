@@ -57,9 +57,9 @@ class SynFlowTrainer:
         # Log final sparsity
         stats = get_sparsity_stats(self.masks)
         logging.info(f"Pruning complete:")
-        logging.info(f"  Overall sparsity: {stats['overall']:.2f}% remaining")
-        logging.info(f"  Total params: {stats['total_params']:,}")
-        logging.info(f"  Remaining params: {stats['remaining_params']:,}")
+        logging.info(f"Overall sparsity: {stats['overall']:.2f}% remaining")
+        logging.info(f"Total params: {stats['total_params']:,}")
+        logging.info(f"Remaining params: {stats['remaining_params']:,}")
 
     def train_epoch(self,
                     train_loader,
@@ -283,11 +283,9 @@ class SynFlowTrainer:
         if sparsity_levels is None:
             sparsity_levels = [0.0, 0.5, 0.8, 0.9, 0.95]
 
-        logging.info(f"\n{'='*80}")
         logging.info(f"ITERATIVE SYNFLOW EXPERIMENT")
         logging.info(f"Sparsity levels: {sparsity_levels}")
         logging.info(f"Epochs per level: {num_epochs}")
-        logging.info(f"{'='*80}\n")
 
         # Store initial weights
         initial_state = {name: param.data.clone()
@@ -296,9 +294,7 @@ class SynFlowTrainer:
         all_results = []
 
         for round_idx, target_sparsity in enumerate(sparsity_levels):
-            logging.info(f"\n{'='*80}")
             logging.info(f"ROUND {round_idx}: Target Sparsity = {target_sparsity*100:.1f}%")
-            logging.info(f"{'='*80}\n")
 
             # Reset model to initial weights
             with torch.no_grad():
@@ -375,10 +371,8 @@ class SynFlowTrainer:
             summary_file = os.path.join(save_dir, 'all_rounds_summary.json')
             with open(summary_file, 'w') as f:
                 json.dump(all_results, f, indent=2)
-            logging.info(f"\nAll results saved to: {save_dir}")
+            logging.info(f"All results saved to: {save_dir}")
 
-        logging.info(f"\n{'='*80}")
         logging.info(f"ITERATIVE SYNFLOW EXPERIMENT COMPLETE")
-        logging.info(f"{'='*80}\n")
 
         return all_results
